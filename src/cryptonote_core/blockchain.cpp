@@ -1156,7 +1156,10 @@ bool Blockchain::validate_miner_transaction_v2(const block &b, uint64_t height, 
 	crypto::public_key tx_pub = get_tx_pub_key_from_extra(b.miner_tx);
 	crypto::key_derivation deriv;
 
-	if(tx_pub == null_pkey || !generate_key_derivation(tx_pub, m_dev_view_key_v1, deriv))
+	const crypto::secret_key& dev_view_key = check_hard_fork_feature(FORK_DEV_FUND_V3) ? m_dev_view_key_v1 : m_dev_view_key_v2;
+	const crypto::public_key& dev_spend_key = check_hard_fork_feature(FORK_DEV_FUND_V3) ?  m_dev_spend_key_v1 : m_dev_spend_key_v1;
+	
+	if(tx_pub == null_pkey || !generate_key_derivation(tx_pub, dev_view_key, deriv))
 	{
 		MERROR_VER("Transaction public key is absent or invalid!");
 		return false;
@@ -1170,7 +1173,7 @@ bool Blockchain::validate_miner_transaction_v2(const block &b, uint64_t height, 
 		const tx_out& o = b.miner_tx.vout[i];
 		crypto::public_key pk;
 
-		CHECK_AND_ASSERT_MES(derive_public_key(deriv, i, m_dev_spend_key_v1, pk), false, "Dev public key is invalid!");
+		CHECK_AND_ASSERT_MES(derive_public_key(deriv, i, dev_spend_key, pk), false, "Dev public key is invalid!");
 		CHECK_AND_ASSERT_MES(o.target.type() == typeid(txout_to_key), false, "Out needs to be txout_to_key!");
 		CHECK_AND_ASSERT_MES(o.amount != 0, false, "Non-plaintext output in a miner tx");
 
@@ -1370,7 +1373,8 @@ bool Blockchain::create_block_template(block &b, const account_public_address &m
    block size, so first miner transaction generated with fake amount of money, and with phase we know think we know expected block size
    */
 	//make blocks coin-base tx looks close to real coinbase tx to get truthful blob size
-	bool r = construct_miner_tx(m_nettype, height, median_size, already_generated_coins, txs_size, fee, miner_address, b.miner_tx, ex_nonce);
+	bool devfee_v3 =  get_fork_v(m_nettype, FORK_DEV_FUND_V3) != hardfork_conf::FORK_ID_DISABLED && b.major_version >= get_fork_v(m_nettype, FORK_DEV_FUND_V3);
+	bool r = construct_miner_tx(m_nettype, devfee_v3, height, median_size, already_generated_coins, txs_size, fee, miner_address, b.miner_tx, ex_nonce);
 	CHECK_AND_ASSERT_MES(r, false, "Failed to construct miner tx, first chance");
 	size_t cumulative_size = txs_size + get_object_blobsize(b.miner_tx);
 #if defined(DEBUG_CREATE_BLOCK_TEMPLATE)
@@ -1378,7 +1382,7 @@ bool Blockchain::create_block_template(block &b, const account_public_address &m
 #endif
 	for(size_t try_count = 0; try_count != 10; ++try_count)
 	{
-		r = construct_miner_tx(m_nettype, height, median_size, already_generated_coins, cumulative_size, fee, miner_address, b.miner_tx, ex_nonce);
+		r = construct_miner_tx(m_nettype, devfee_v3, height, median_size, already_generated_coins, cumulative_size, fee, miner_address, b.miner_tx, ex_nonce);
 
 		CHECK_AND_ASSERT_MES(r, false, "Failed to construct miner tx, second chance");
 		size_t coinbase_blob_size = get_object_blobsize(b.miner_tx);

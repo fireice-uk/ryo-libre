@@ -64,7 +64,7 @@ void classify_addresses(const std::vector<tx_destination_entry> &destinations, c
 	LOG_PRINT_L2("destinations include " << num_stdaddresses << " standard addresses and " << num_subaddresses << " subaddresses");
 }
 //---------------------------------------------------------------
-bool construct_miner_tx(cryptonote::network_type nettype, size_t height, size_t median_size, uint64_t already_generated_coins, size_t current_block_size, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce)
+bool construct_miner_tx(cryptonote::network_type nettype, bool devfee_v3, size_t height, size_t median_size, uint64_t already_generated_coins, size_t current_block_size, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce)
 {
 	tx.vin.clear();
 	tx.vout.clear();
@@ -101,11 +101,18 @@ bool construct_miner_tx(cryptonote::network_type nettype, size_t height, size_t 
 
 	tx_out out = { block_reward, txout_to_key(out_eph_public_key) };
 	tx.vout.push_back(out);
-	
 
 	address_parse_info dev_addr;
-	r = get_account_address_from_str<MAINNET>(dev_addr, std::string(common_config::DEV_FUND_ADDRESS_V2));
-	CHECK_AND_ASSERT_MES(r, false, "Failed to parse dev address");
+	if(devfee_v3)
+	{
+		r = get_account_address_from_str<MAINNET>(dev_addr, std::string(common_config::DEV_FUND_ADDRESS_V2));
+		CHECK_AND_ASSERT_MES(r, false, "Failed to parse dev address");
+	}
+	else
+	{
+		r = get_account_address_from_str<MAINNET>(dev_addr, std::string(common_config::DEV_FUND_ADDRESS_V1));
+		CHECK_AND_ASSERT_MES(r, false, "Failed to parse dev address");
+	}
 
 	r = crypto::generate_key_derivation(dev_addr.address.m_view_public_key, txkey.sec, derivation);
 	CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" << dev_addr.address.m_view_public_key << ", " << txkey.sec << ")");
